@@ -5,20 +5,42 @@ from datetime import datetime, timedelta
 def fetch_naver_news(category_id):
     URL=f'https://news.naver.com/section/{category_id}'
 
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+
     try:
-        response = requests.get(URL, timeout=10)
+        response = requests.get(URL, headers=headers, timeout=10)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, 'xml')
-        items = soup.find_all('item', limit=10)
+        soup = BeautifulSoup(response.content, 'html.parser')
 
         news_list = []
-        for item in items:
+        headlines = soup.select('a.sa_text_title')
+
+        for item in headlines[:15]:
+            title = item.get_text(strip=True)
+            link = item.get('href', '')
+            
+            if link.startswith('/'):
+                link = 'https://news.naver.com' + link
+            
+            description = ''
+            try:
+                article_response = requests.get(link, headers=headers, timeout=10)
+                article_soup = BeautifulSoup(article_response.content, 'html.parser')
+                article_body = article_soup.select_one('article#dic_area')
+
+                if article_body:
+                    description = article_body.get_text(strip=True)[:200] + '...'
+            except:
+                pass
+
             news_list.append({
-                'title': item.find('title').text,
-                'link': item.find('link').text,
-                'description': BeautifulSoup(item.find('description').text, 'html.parser').get_text(),
-                'pub_date': item.find('pubDate').text
+                'title': title,
+                'link': link,
+                'description': description,
+                'pub_date': datetime.now().strftime('%Y-%m-%d %H:%M')
             })
         
         return news_list
@@ -47,3 +69,6 @@ if __name__ == '__main__':
     news = get_all_news()
     for category, items in news.items():
         print(f'\n{category}: {len(items)}개')
+        for item in items:
+            print(f"- {item['title']} ({item['link']})")
+            print(f"  {item['description']}\n")
